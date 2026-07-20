@@ -1,4 +1,12 @@
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const MAX_REQUEST_TEXT_LENGTH = 4000;
+
+export class PlanRequestValidationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -7,6 +15,14 @@ function isObject(value) {
 function trimmedString(value, label) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${label} must be a nonempty string`);
+  }
+
+  return value.trim();
+}
+
+function trimmedRequestString(value, label, code) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new PlanRequestValidationError(code, `${label} must be a nonempty string`);
   }
 
   return value.trim();
@@ -33,9 +49,9 @@ export function validatePlanRequest(value) {
     throw new Error('Plan request body must be an object');
   }
 
-  const goal = trimmedString(value.goal, 'goal');
-  if (goal.length > 1000) {
-    throw new Error('goal must be 1000 characters or fewer');
+  const goal = trimmedRequestString(value.goal, 'goal', 'EMPTY_GOAL');
+  if (goal.length > MAX_REQUEST_TEXT_LENGTH) {
+    throw new PlanRequestValidationError('LONG_GOAL', `goal must be ${MAX_REQUEST_TEXT_LENGTH} characters or fewer`);
   }
 
   const answers = value.answers === undefined ? [] : value.answers;
@@ -49,9 +65,10 @@ export function validatePlanRequest(value) {
   return {
     goal,
     answers: answers.map((answer, index) => {
-      const normalized = trimmedString(answer, `answers[${index}]`);
-      if (normalized.length > 500) {
-        throw new Error(`answers[${index}] must be 500 characters or fewer`);
+      const label = `answers[${index}]`;
+      const normalized = trimmedRequestString(answer, label, 'EMPTY_ANSWER');
+      if (normalized.length > MAX_REQUEST_TEXT_LENGTH) {
+        throw new PlanRequestValidationError('LONG_ANSWER', `${label} must be ${MAX_REQUEST_TEXT_LENGTH} characters or fewer`);
       }
       return normalized;
     }),

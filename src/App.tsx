@@ -1,12 +1,33 @@
-import { FormEvent, useRef, useState } from 'react'
+import { ChangeEvent, FormEvent, useCallback, useRef, useState } from 'react'
 import { requestPlan } from './plan-api'
 import { initialMvpPlan, loadSavedPlan, savePlanToStorage, type Plan } from './plan-state'
 import './styles.css'
 
 type Screen = 'home' | 'chat' | 'thinking' | 'preview'
+const MAX_REQUEST_TEXT_LENGTH = 4000
 
 const originalGoal = '今天下午我要把 MVP 的展示网页做出来，但还没想好怎么安排。'
 const quickAnswers = ['下午 3 小时，做出可演示版本', '下午 2 小时，先完成首屏', '时间弹性，优先完整流程']
+
+function validateRequest(goal: string, answer: string) {
+  const trimmedGoal = goal.trim()
+  const trimmedAnswer = answer.trim()
+  if (!trimmedGoal) return '请先填写今天想推进什么。'
+  if (!trimmedAnswer) return '请补充你的可用时间或目标成果。'
+  if (trimmedGoal.length > MAX_REQUEST_TEXT_LENGTH) return '目标过长，请控制在 4000 字符以内。'
+  if (trimmedAnswer.length > MAX_REQUEST_TEXT_LENGTH) return '补充内容过长，请控制在 4000 字符以内。'
+  return null
+}
+
+function useAutoGrowingTextarea() {
+  return useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    const height = Math.min(Math.max(textarea.scrollHeight, 40), 160)
+    textarea.style.height = `${height}px`
+    textarea.style.overflowY = textarea.scrollHeight >= 160 ? 'auto' : 'hidden'
+  }, [])
+}
 
 function AppHeader({ onBack }: { onBack?: () => void }) {
   return (
@@ -66,10 +87,19 @@ type ChatProps = {
 }
 
 function Chat({ answer, disabled, error, goal, onAnswerChange, onBack, onGoalChange, onSubmit }: ChatProps) {
+  const resizeTextarea = useAutoGrowingTextarea()
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (answer.trim()) onSubmit(answer)
+    onSubmit(answer)
   }
+
+  const textareaProps = (onChange: (value: string) => void) => ({
+    ref: resizeTextarea,
+    onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
+      resizeTextarea(event.currentTarget)
+      onChange(event.currentTarget.value)
+    },
+  })
 
   return (
     <section className="screen chat-screen">
@@ -80,7 +110,7 @@ function Chat({ answer, disabled, error, goal, onAnswerChange, onBack, onGoalCha
       </div>
       <label className="goal-field" htmlFor="plan-goal">
         今天想推进什么
-        <input className="goal-input" id="plan-goal" value={goal} onChange={(event) => onGoalChange(event.target.value)} disabled={disabled} />
+        <textarea className="goal-input" id="plan-goal" rows={1} value={goal} disabled={disabled} {...textareaProps(onGoalChange)} />
       </label>
       <div className="conversation enter delay-1">
         <div className="bubble user-bubble">{originalGoal}</div>
@@ -98,7 +128,7 @@ function Chat({ answer, disabled, error, goal, onAnswerChange, onBack, onGoalCha
       </div>
       <form className="composer" onSubmit={submit}>
         <label className="sr-only" htmlFor="plan-reply">补充你的安排</label>
-        <input id="plan-reply" aria-label="补充你的安排" value={answer} onChange={(event) => onAnswerChange(event.target.value)} disabled={disabled} placeholder="例如：我有 2 小时，先做完整演示" />
+        <textarea id="plan-reply" aria-label="补充你的安排" rows={1} value={answer} disabled={disabled} placeholder="例如：我有 2 小时，先做完整演示" {...textareaProps(onAnswerChange)} />
         <button type="submit" aria-label="发送" disabled={disabled}>发送</button>
       </form>
     </section>
@@ -157,6 +187,12 @@ export function App() {
 
   const beginGeneration = async (submittedAnswer: string) => {
     if (isGenerating.current) return
+
+    const validationError = validateRequest(goal, submittedAnswer)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
 
     isGenerating.current = true
     setAnswer(submittedAnswer)

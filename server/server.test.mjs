@@ -50,6 +50,20 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function validJsonBodyAtByteSize(byteSize) {
+  const payload = {
+    goal: '汉'.repeat(4000),
+    answers: ['汉'.repeat(4000), ''],
+  };
+  const remainingBytes = byteSize - Buffer.byteLength(JSON.stringify(payload));
+  payload.answers[1] = '汉'.repeat(Math.floor(remainingBytes / 3));
+  payload.answers[1] += 'x'.repeat(byteSize - Buffer.byteLength(JSON.stringify(payload)));
+
+  const body = JSON.stringify(payload);
+  if (Buffer.byteLength(body) !== byteSize) throw new Error('could not construct an exact-sized JSON body');
+  return body;
+}
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
@@ -80,7 +94,7 @@ describe('plan server', () => {
     expect(JSON.parse(response.body)).toEqual({ error: '请填写目标后重试。' });
   });
 
-  test('rejects an oversized plan body before the client finishes sending it', async () => {
+  test('rejects a plan body larger than 32 KiB before the client finishes sending it', async () => {
     let runHermesCalled = false;
     const baseUrl = await startServer({ runHermes: async () => { runHermesCalled = true; return JSON.stringify(validPlan); } });
     const clientRequest = request(new URL('/api/plan', baseUrl), {
@@ -98,18 +112,58 @@ describe('plan server', () => {
     });
 
     try {
-      clientRequest.write('x'.repeat(16 * 1024 + 1));
+      clientRequest.write(JSON.stringify({ goal: 'x'.repeat(32 * 1024), answers: [] }));
       const response = await Promise.race([
         responsePromise,
         delay(250).then(() => { throw new Error('server did not reject the oversized body promptly'); }),
       ]);
 
       expect(response.status).toBe(400);
-      expect(JSON.parse(response.body)).toEqual({ error: '请填写目标后重试。' });
+      expect(JSON.parse(response.body)).toEqual({ error: '输入内容过大，请删减后重试。' });
       expect(runHermesCalled).toBe(false);
     } finally {
       clientRequest.destroy();
     }
+  });
+
+  test('accepts a valid JSON plan body of exactly 32 KiB', async () => {
+    let runHermesCalled = false;
+    const body = validJsonBodyAtByteSize(32 * 1024);
+    const baseUrl = await startServer({ runHermes: async () => { runHermesCalled = true; return JSON.stringify(validPlan); } });
+
+    const response = await httpRequest(baseUrl, '/api/plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+
+    expect(Buffer.byteLength(body)).toBe(32 * 1024);
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(validPlan);
+    expect(runHermesCalled).toBe(true);
+  });
+
+  test.each([
+    ['an empty goal', { goal: '', answers: ['available this afternoon'] }, '请先填写今天想推进什么。'],
+    ['a whitespace-only goal', { goal: '   ', answers: ['available this afternoon'] }, '请先填写今天想推进什么。'],
+    ['a blank answer', { goal: 'Launch a product', answers: ['   '] }, '请补充你的可用时间或目标成果。'],
+    ['a goal beyond 4000 code units', { goal: '😀'.repeat(2001), answers: [] }, '目标过长，请控制在 4000 字符以内。'],
+    ['an answer beyond 4000 code units', { goal: 'Launch a product', answers: ['😀'.repeat(2001)] }, '补充内容过长，请控制在 4000 字符以内。'],
+    ['a goal with 4001 ASCII code units', { goal: 'x'.repeat(4001), answers: [] }, '目标过长，请控制在 4000 字符以内。'],
+    ['an answer with 4001 ASCII code units', { goal: 'Launch a product', answers: ['x'.repeat(4001)] }, '补充内容过长，请控制在 4000 字符以内。'],
+  ])('returns a user-safe validation error for %s', async (_caseName, payload, error) => {
+    let runHermesCalled = false;
+    const baseUrl = await startServer({ runHermes: async () => { runHermesCalled = true; return JSON.stringify(validPlan); } });
+
+    const response = await httpRequest(baseUrl, '/api/plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body)).toEqual({ error });
+    expect(runHermesCalled).toBe(false);
   });
 
   test('returns a parsed plan from injected Hermes output', async () => {

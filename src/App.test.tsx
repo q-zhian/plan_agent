@@ -39,6 +39,114 @@ afterEach(() => {
 })
 
 describe('planning assistant demo', () => {
+  test('renders the goal and supplementary answer as multiline textareas', () => {
+    render(<App />)
+
+    openChat()
+    const [goal, answer] = screen.getAllByRole('textbox')
+
+    expect(goal).toBeInstanceOf(HTMLTextAreaElement)
+    expect(answer).toBeInstanceOf(HTMLTextAreaElement)
+  })
+
+  test('submits multiline text at the 4000-character limit', async () => {
+    const goal = `${'g'.repeat(3998)}\nq`
+    const answer = `${'a'.repeat(3998)}\nz`
+    mockedRequestPlan.mockResolvedValueOnce(generatedPlan)
+    render(<App />)
+
+    openChat()
+    const [goalInput, answerInput] = screen.getAllByRole('textbox')
+    fireEvent.change(goalInput, { target: { value: goal } })
+    fireEvent.change(answerInput, { target: { value: answer } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+
+    await waitFor(() => expect(mockedRequestPlan).toHaveBeenCalledOnce())
+    const [request] = mockedRequestPlan.mock.calls[0]
+    expect(request.goal).toHaveLength(4000)
+    expect(request.answers[0]).toHaveLength(4000)
+    expect(request.goal).toContain('\n')
+    expect(request.answers[0]).toContain('\n')
+  })
+
+  test('submits 2000 emoji at the 4000 UTF-16 code unit limit', async () => {
+    const goal = '\u{1F600}'.repeat(2000)
+    const answer = '\u{1F603}'.repeat(2000)
+    mockedRequestPlan.mockResolvedValueOnce(generatedPlan)
+    render(<App />)
+
+    openChat()
+    const [goalInput, answerInput] = screen.getAllByRole('textbox')
+    fireEvent.change(goalInput, { target: { value: goal } })
+    fireEvent.change(answerInput, { target: { value: answer } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+
+    await waitFor(() => expect(mockedRequestPlan).toHaveBeenCalledWith({ goal, answers: [answer] }))
+  })
+
+  test.each([
+    ['empty goal', ['', '有可用时间'], '请先填写今天想推进什么。'],
+    ['whitespace-only goal', ['   ', '有可用时间'], '请先填写今天想推进什么。'],
+    ['blank answer', ['修复登录流程', '   '], '请补充你的可用时间或目标成果。'],
+    ['a goal longer than 4000 characters', ['x'.repeat(4001), '有可用时间'], '目标过长，请控制在 4000 字符以内。'],
+    ['a goal with 2001 emoji', ['😀'.repeat(2001), '有可用时间'], '目标过长，请控制在 4000 字符以内。'],
+    ['an answer longer than 4000 characters', ['修复登录流程', 'x'.repeat(4001)], '补充内容过长，请控制在 4000 字符以内。'],
+    ['an answer with 2001 emoji', ['\u4fee\u590d\u767b\u5f55\u6d41\u7a0b', '\u{1F600}'.repeat(2001)], '\u8865\u5145\u5185\u5bb9\u8fc7\u957f\uff0c\u8bf7\u63a7\u5236\u5728 4000 \u5b57\u7b26\u4ee5\u5185\u3002'],
+  ])('shows a client validation error for %s without starting generation', async (_caseName, [goal, answer], error) => {
+    render(<App />)
+
+    openChat()
+    const [goalInput, answerInput] = screen.getAllByRole('textbox')
+    fireEvent.change(goalInput, { target: { value: goal } })
+    fireEvent.change(answerInput, { target: { value: answer } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+
+    expect(await screen.findByText(error, { exact: true })).toBeTruthy()
+    expect(mockedRequestPlan).not.toHaveBeenCalled()
+    expect(screen.queryByText(/正在整理你的下午安排/)).toBeNull()
+  })
+
+  test('moves to the thinking view and starts only one generation while the request is in flight', () => {
+    const response = deferred<Plan>()
+    mockedRequestPlan.mockReturnValueOnce(response.promise)
+    render(<App />)
+
+    openChat()
+    const [, answerInput] = screen.getAllByRole('textbox')
+    fireEvent.change(answerInput, { target: { value: '有可用时间' } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+
+    expect(screen.getByText(/正在整理你的下午安排/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /发送/ })).toBeNull()
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0)
+    expect(mockedRequestPlan).toHaveBeenCalledOnce()
+    response.resolve(generatedPlan)
+  })
+
+  test('grows a textarea to its content height and caps scrolling at 160px', () => {
+    render(<App />)
+
+    openChat()
+    const [goalInput, answerInput] = screen.getAllByRole('textbox')
+    Object.defineProperty(goalInput, 'scrollHeight', { configurable: true, value: 96 })
+    fireEvent.input(goalInput, { target: { value: '第一行\n第二行' } })
+    expect((goalInput as HTMLTextAreaElement).style.height).toBe('96px')
+
+    Object.defineProperty(goalInput, 'scrollHeight', { configurable: true, value: 240 })
+    fireEvent.input(goalInput, { target: { value: '长'.repeat(4000) } })
+    expect((goalInput as HTMLTextAreaElement).style.height).toBe('160px')
+    expect((goalInput as HTMLTextAreaElement).style.overflowY).toBe('auto')
+
+    Object.defineProperty(answerInput, 'scrollHeight', { configurable: true, value: 96 })
+    fireEvent.input(answerInput, { target: { value: '第一行\n第二行' } })
+    expect((answerInput as HTMLTextAreaElement).style.height).toBe('96px')
+
+    Object.defineProperty(answerInput, 'scrollHeight', { configurable: true, value: 240 })
+    fireEvent.input(answerInput, { target: { value: '长'.repeat(4000) } })
+    expect((answerInput as HTMLTextAreaElement).style.height).toBe('160px')
+    expect((answerInput as HTMLTextAreaElement).style.overflowY).toBe('auto')
+  })
+
   test('submits a quick answer, shows thinking, previews the returned plan, and saves it home', async () => {
     const response = deferred<Plan>()
     mockedRequestPlan.mockReturnValueOnce(response.promise)

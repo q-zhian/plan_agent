@@ -7,16 +7,30 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   createHermesPrompt,
   parsePlanResponse,
+  PlanRequestValidationError,
   validatePlanRequest,
 } from './server/plan-contract.mjs';
 
-const MAX_BODY_SIZE = 16 * 1024;
+const MAX_BODY_SIZE = 32 * 1024;
 const MAX_OUTPUT_SIZE = 128 * 1024;
 const KILL_GRACE_MS = 1000;
 
 class HermesTimeoutError extends Error {}
 class HermesAbortedError extends Error {}
 class BodyTooLargeError extends Error {}
+
+function planRequestError(error) {
+  if (error instanceof BodyTooLargeError) return '输入内容过大，请删减后重试。';
+  if (!(error instanceof PlanRequestValidationError)) return '请填写目标后重试。';
+
+  switch (error.code) {
+    case 'EMPTY_GOAL': return '请先填写今天想推进什么。';
+    case 'EMPTY_ANSWER': return '请补充你的可用时间或目标成果。';
+    case 'LONG_GOAL': return '目标过长，请控制在 4000 字符以内。';
+    case 'LONG_ANSWER': return '补充内容过长，请控制在 4000 字符以内。';
+    default: return '请填写目标后重试。';
+  }
+}
 
 function getTimeout() {
   const value = Number.parseInt(process.env.HERMES_TIMEOUT_MS ?? '90000', 10);
@@ -282,7 +296,7 @@ export function createApp({
         planRequest = validatePlanRequest(await readJsonBody(request));
       } catch (error) {
         if (!response.destroyed) {
-          sendJson(response, 400, { error: '请填写目标后重试。' }, {
+          sendJson(response, 400, { error: planRequestError(error) }, {
             close: error instanceof BodyTooLargeError,
           });
         }

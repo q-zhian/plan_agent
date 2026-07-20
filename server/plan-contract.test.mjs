@@ -55,12 +55,23 @@ describe('plan contract', () => {
     expect(validatePlanRequest({ goal: 'Ship it' })).toEqual({ goal: 'Ship it', answers: [] });
   });
 
-  test('rejects invalid request bounds', () => {
+  test('accepts request text at the 4000 UTF-16 code unit limit', () => {
+    const goal = '\u{1F600}'.repeat(2000);
+    const answer = '\u{1F603}'.repeat(2000);
+    expect(validatePlanRequest({ goal, answers: [answer] })).toEqual({
+      goal,
+      answers: [answer],
+    });
+  });
+
+  test('rejects request text beyond the 4000 UTF-16 code unit limit', () => {
     expect(() => validatePlanRequest(null)).toThrow(/object/i);
     expect(() => validatePlanRequest({ goal: '   ' })).toThrow(/goal/i);
-    expect(() => validatePlanRequest({ goal: 'x'.repeat(1001) })).toThrow(/1000/i);
+    expect(() => validatePlanRequest({ goal: 'x'.repeat(4001) })).toThrow(/4000/i);
+    expect(() => validatePlanRequest({ goal: '😀'.repeat(2001) })).toThrow(/4000/i);
     expect(() => validatePlanRequest({ goal: 'ok', answers: Array(11).fill('a') })).toThrow(/10/i);
-    expect(() => validatePlanRequest({ goal: 'ok', answers: ['x'.repeat(501)] })).toThrow(/500/i);
+    expect(() => validatePlanRequest({ goal: 'ok', answers: ['x'.repeat(4001)] })).toThrow(/4000/i);
+    expect(() => validatePlanRequest({ goal: 'ok', answers: ['😀'.repeat(2001)] })).toThrow(/4000/i);
   });
 
   test('keeps supplied prompt-injection text as data while retaining fixed constraints', () => {
