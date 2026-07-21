@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { App } from './App'
 import { requestPlan } from './plan-api'
@@ -80,6 +80,22 @@ describe('production Hermes MVP interface', () => {
     await waitFor(() => expect(mockedRequestPlan).toHaveBeenCalledWith({ goal, answers: [answer] }))
   })
 
+  test('clears a valid composer submission while sending its original snapshot to Hermes', () => {
+    const response = deferred<Plan>()
+    const goal = '完成正式 MVP'
+    const answer = '下午两点前完成验证，并保留三十分钟回归测试。'
+    mockedRequestPlan.mockReturnValueOnce(response.promise)
+    render(<App />)
+    openConversation()
+    fillRequest(goal, answer)
+
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    expect((screen.getByRole('textbox', { name: '补充你的安排' }) as HTMLTextAreaElement).value).toBe('')
+    expect(mockedRequestPlan).toHaveBeenCalledWith({ goal, answers: [answer] })
+    expect(screen.getByText(answer)).toBeTruthy()
+  })
+
   test.each([
     ['empty goal', '', '有可用时间', '请先填写今天想推进什么。'],
     ['blank answer', '修复登录流程', '   ', '请补充你的可用时间或目标成果。'],
@@ -93,6 +109,7 @@ describe('production Hermes MVP interface', () => {
 
     expect((await screen.findByRole('alert')).textContent).toBe(message)
     expect(mockedRequestPlan).not.toHaveBeenCalled()
+    expect((screen.getByRole('textbox', { name: '补充你的安排' }) as HTMLTextAreaElement).value).toBe(answer)
   })
 
   test('auto-grows both long-text fields and caps scrolling at 160px', () => {
@@ -121,14 +138,41 @@ describe('production Hermes MVP interface', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
     expect(screen.getByText('正在整理你的计划…')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('已等待 0 秒')
     expect(screen.getByRole('heading', { name: '对话' })).toBeTruthy()
     expect(mockedRequestPlan).toHaveBeenCalledOnce()
 
     response.resolve(generatedPlan)
     await waitFor(() => expect(screen.getByText('计划预览')).toBeTruthy())
+    expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByText(generatedPlan.title)).toBeTruthy()
     expect(screen.getAllByTestId('preview-step')).toHaveLength(4)
     expect(screen.getByRole('heading', { name: '对话' })).toBeTruthy()
+  })
+
+  test('shows an increasing elapsed wait time only while Hermes is generating', async () => {
+    vi.useFakeTimers()
+    try {
+      const response = deferred<Plan>()
+      mockedRequestPlan.mockReturnValueOnce(response.promise)
+      render(<App />)
+      openConversation()
+      fillRequest()
+      fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+      expect(screen.getByRole('status').textContent).toContain('已等待 0 秒')
+      act(() => { vi.advanceTimersByTime(2_000) })
+      expect(screen.getByRole('status').textContent).toContain('已等待 2 秒')
+      act(() => { vi.advanceTimersByTime(89_000) })
+      expect(screen.getByRole('status').textContent).toContain('比通常的 30–90 秒更久')
+
+      await act(async () => { response.resolve(generatedPlan) })
+      expect(screen.queryByRole('status')).toBeNull()
+      act(() => { vi.advanceTimersByTime(2_000) })
+      expect(screen.queryByRole('status')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('preserves input after an error and permits retry', async () => {
@@ -139,12 +183,27 @@ describe('production Hermes MVP interface', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
     expect(await screen.findByText('Hermes 响应超时，请稍后重试。')).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
     expect((screen.getByRole('textbox', { name: '今天想推进什么' }) as HTMLTextAreaElement).value).toBe('完成联调')
     expect((screen.getByRole('textbox', { name: '补充你的安排' }) as HTMLTextAreaElement).value).toBe('保留两个小时')
 
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
     await waitFor(() => expect(mockedRequestPlan).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.getByText('计划预览')).toBeTruthy())
+  })
+
+  test('does not start a second Hermes request from repeated sends', () => {
+    const response = deferred<Plan>()
+    mockedRequestPlan.mockReturnValueOnce(response.promise)
+    render(<App />)
+    openConversation()
+    fillRequest()
+    const send = screen.getByRole('button', { name: '发送' })
+
+    fireEvent.click(send)
+    fireEvent.click(send)
+
+    expect(mockedRequestPlan).toHaveBeenCalledOnce()
   })
 
   test('saves the real generated plan to Today and restores it after remount', async () => {

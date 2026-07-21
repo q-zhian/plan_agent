@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useCallback, useRef, useState } from 'react'
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { requestPlan } from './plan-api'
 import { initialMvpPlan, loadSavedPlan, savePlanToStorage, type Plan } from './plan-state'
 import './styles.css'
@@ -87,6 +87,7 @@ function Today({ plan, onOpenConversation }: { plan: Plan; onOpenConversation: (
 type ConversationProps = {
   answer: string
   error: string | null
+  elapsedSeconds: number
   goal: string
   isGenerating: boolean
   onAnswerChange: (value: string) => void
@@ -95,9 +96,10 @@ type ConversationProps = {
   onSave: () => void
   onSubmit: () => void
   previewPlan: Plan | null
+  submittedAnswer: string | null
 }
 
-function Conversation({ answer, error, goal, isGenerating, onAnswerChange, onBack, onGoalChange, onSave, onSubmit, previewPlan }: ConversationProps) {
+function Conversation({ answer, elapsedSeconds, error, goal, isGenerating, onAnswerChange, onBack, onGoalChange, onSave, onSubmit, previewPlan, submittedAnswer }: ConversationProps) {
   const resizeTextarea = useAutoGrowingTextarea()
   const textareaProps = (onChange: (value: string) => void) => ({
     ref: resizeTextarea,
@@ -130,10 +132,24 @@ function Conversation({ answer, error, goal, isGenerating, onAnswerChange, onBac
           <textarea id="plan-goal" rows={1} value={goal} disabled={isGenerating} {...textareaProps(onGoalChange)} />
         </label>
 
+        {submittedAnswer && (
+          <div className="message-group user-group">
+            <p className="message user-message">{submittedAnswer}</p>
+          </div>
+        )}
+
         {isGenerating && (
-          <div className="message-group agent-group status-message" aria-live="polite">
+          <div className="message-group agent-group status-message" role="status" aria-live="polite">
             <span className="agent-marker" aria-hidden="true">∴</span>
-            <p className="message">正在整理你的计划…</p>
+            <span className="status-activity" aria-hidden="true" />
+            <div>
+              <p className="message">正在整理你的计划…</p>
+              <p className="status-details">
+                {elapsedSeconds > 90
+                  ? `已等待 ${elapsedSeconds} 秒，比通常的 30–90 秒更久；Hermes 仍在处理中。`
+                  : `已等待 ${elapsedSeconds} 秒 · 通常需要约 30–90 秒`}
+              </p>
+            </div>
           </div>
         )}
 
@@ -182,9 +198,22 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [previewPlan, setPreviewPlan] = useState<Plan | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [submittedAnswer, setSubmittedAnswer] = useState<string | null>(null)
   const generationLock = useRef(false)
 
   const clearError = () => setError(null)
+
+  useEffect(() => {
+    if (!isGenerating) return
+
+    const startedAt = Date.now()
+    const intervalId = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000))
+    }, 1_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [isGenerating])
 
   const beginGeneration = async () => {
     if (generationLock.current) return
@@ -194,14 +223,20 @@ export function App() {
       return
     }
 
+    const goalSnapshot = goal
+    const answerSnapshot = answer
     generationLock.current = true
     setIsGenerating(true)
+    setElapsedSeconds(0)
     setPreviewPlan(null)
+    setSubmittedAnswer(answerSnapshot)
+    setAnswer('')
     clearError()
 
     try {
-      setPreviewPlan(await requestPlan({ goal, answers: [answer] }))
+      setPreviewPlan(await requestPlan({ goal: goalSnapshot, answers: [answerSnapshot] }))
     } catch (caughtError) {
+      setAnswer(answerSnapshot)
       setError(caughtError instanceof Error && caughtError.message ? caughtError.message : '生成计划失败，请稍后重试。')
     } finally {
       generationLock.current = false
@@ -224,6 +259,7 @@ export function App() {
         ) : (
           <Conversation
             answer={answer}
+            elapsedSeconds={elapsedSeconds}
             error={error}
             goal={goal}
             isGenerating={isGenerating}
@@ -233,6 +269,7 @@ export function App() {
             onSave={savePlan}
             onSubmit={beginGeneration}
             previewPlan={previewPlan}
+            submittedAnswer={submittedAnswer}
           />
         )}
       </div>
