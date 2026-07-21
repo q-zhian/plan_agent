@@ -3,11 +3,22 @@ import { requestPlan } from './plan-api'
 import { initialMvpPlan, loadSavedPlan, savePlanToStorage, type Plan } from './plan-state'
 import './styles.css'
 
-type Screen = 'home' | 'chat' | 'thinking' | 'preview'
+type Screen = 'today' | 'conversation'
 const MAX_REQUEST_TEXT_LENGTH = 4000
+const originalGoal = '今天我想完成一个重要目标，请帮我把它整理成可执行的计划。'
 
-const originalGoal = '今天下午我要把 MVP 的展示网页做出来，但还没想好怎么安排。'
-const quickAnswers = ['下午 3 小时，做出可演示版本', '下午 2 小时，先完成首屏', '时间弹性，优先完整流程']
+const bubbleIcon = (
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18.2 3.8 21l3.3-1.1c1.3.7 2.9 1.1 4.9 1.1 4.8 0 8.2-2.8 8.2-7s-3.4-7-8.2-7-8.2 2.8-8.2 7c0 1.5.5 2.9 1.4 4.2Z" /><path d="M8.2 14h7.6" /></svg>
+)
+const backIcon = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.8 5.8-6.1 6.2 6.1 6.2" /></svg>
+const chevronIcon = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7 5 5-5 5" /></svg>
+const sendIcon = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3.6-8L4 4Z" /><path d="M7.6 12H20" /></svg>
+
+function todayLabel() {
+  const date = new Date()
+  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 · ${weekdays[date.getDay()]}`
+}
 
 function validateRequest(goal: string, answer: string) {
   const trimmedGoal = goal.trim()
@@ -29,70 +40,65 @@ function useAutoGrowingTextarea() {
   }, [])
 }
 
-function AppHeader({ onBack }: { onBack?: () => void }) {
-  return (
-    <header className="topbar">
-      {onBack ? <button className="back-button" onClick={onBack} aria-label="返回今天计划">←</button> : <span className="day-mark">MON</span>}
-      <span className="topbar-title">平静地推进一件事</span>
-      <span className="presence"><i /> 在线</span>
-    </header>
-  )
-}
+function Today({ plan, onOpenConversation }: { plan: Plan; onOpenConversation: () => void }) {
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
 
-function Home({ plan, onNewPlan }: { plan: Plan; onNewPlan: () => void }) {
   return (
-    <section className="screen home-screen">
-      <AppHeader />
-      <div className="home-heading enter">
-        <p className="eyebrow">7 月 20 日 · 星期一</p>
-        <h1>今天的计划</h1>
-        <p className="supporting">留一点余白，先完成最重要的部分。</p>
-      </div>
-
-      <div className="plan-summary enter delay-1">
+    <section className="screen today-screen">
+      <header className="today-header">今天 · {todayLabel()}</header>
+      <div className="today-summary">
         <span>{plan.title}</span>
-        <b>{plan.totalDuration}</b>
+        <span>{plan.totalDuration}</span>
       </div>
-
       <div className="timeline" aria-label={`${plan.title}时间轴`}>
-        {plan.tasks.map((task, index) => (
-          <article className="task-row enter" style={{ animationDelay: `${120 + index * 65}ms` }} key={`${task.startTime}-${task.title}`}>
-            <time>{task.startTime}</time>
-            <div className="rail"><span /></div>
-            <div className="task-card">
-              <div className="task-card-top"><span>{task.startTime} — {task.endTime}</span><span>{task.estimatedDuration}</span></div>
-              <h2>{task.title}</h2>
-              <p>{task.description}</p>
-            </div>
-          </article>
-        ))}
+        {plan.tasks.map((task, index) => {
+          const taskId = `${task.startTime}-${task.title}`
+          const expanded = expandedTaskId === taskId
+          return (
+            <article className={`timeline-row${index === 0 ? ' is-current' : ''}`} key={taskId}>
+              <time>{task.startTime}</time>
+              <div className="timeline-rail"><span className="timeline-node" /></div>
+              <div className="task-content">
+                <button
+                  className="task-trigger"
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setExpandedTaskId(expanded ? null : taskId)}
+                >
+                  <span>{task.title}</span>
+                  <span className={`chevron${expanded ? ' is-open' : ''}`}>{chevronIcon}</span>
+                </button>
+                {expanded && (
+                  <div className="task-details">
+                    <p>{task.description}</p>
+                    <p><strong>时间</strong>{task.startTime} — {task.endTime} · {task.estimatedDuration}</p>
+                  </div>
+                )}
+              </div>
+            </article>
+          )
+        })}
       </div>
-
-      <div className="bottom-action">
-        <button className="primary-button" onClick={onNewPlan} aria-label="新建计划">新建计划 <span aria-hidden="true">→</span></button>
-      </div>
+      <button className="agent-entry" type="button" onClick={onOpenConversation} aria-label="打开对话">{bubbleIcon}</button>
     </section>
   )
 }
 
-type ChatProps = {
+type ConversationProps = {
   answer: string
-  disabled: boolean
   error: string | null
   goal: string
-  onAnswerChange: (answer: string) => void
+  isGenerating: boolean
+  onAnswerChange: (value: string) => void
   onBack: () => void
-  onGoalChange: (goal: string) => void
-  onSubmit: (answer: string) => void
+  onGoalChange: (value: string) => void
+  onSave: () => void
+  onSubmit: () => void
+  previewPlan: Plan | null
 }
 
-function Chat({ answer, disabled, error, goal, onAnswerChange, onBack, onGoalChange, onSubmit }: ChatProps) {
+function Conversation({ answer, error, goal, isGenerating, onAnswerChange, onBack, onGoalChange, onSave, onSubmit, previewPlan }: ConversationProps) {
   const resizeTextarea = useAutoGrowingTextarea()
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    onSubmit(answer)
-  }
-
   const textareaProps = (onChange: (value: string) => void) => ({
     ref: resizeTextarea,
     onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -100,115 +106,106 @@ function Chat({ answer, disabled, error, goal, onAnswerChange, onBack, onGoalCha
       onChange(event.currentTarget.value)
     },
   })
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    onSubmit()
+  }
 
   return (
-    <section className="screen chat-screen">
-      <AppHeader onBack={onBack} />
-      <div className="chat-heading enter">
-        <p className="eyebrow">新建计划</p>
-        <h1>把模糊的想法排进今天</h1>
-      </div>
-      <label className="goal-field" htmlFor="plan-goal">
-        今天想推进什么
-        <textarea className="goal-input" id="plan-goal" rows={1} value={goal} disabled={disabled} {...textareaProps(onGoalChange)} />
-      </label>
-      <div className="conversation enter delay-1">
-        <div className="bubble user-bubble">{originalGoal}</div>
-        <div className="assistant-label">计划助手</div>
-        <div className="bubble assistant-bubble">你今天下午能留出多长时间？最重要的是做出哪一项可交付成果？</div>
-      </div>
-      <div className="answer-area enter delay-2">
-        <p>选一个接近的安排，或直接补充：</p>
-        {error && <p className="request-error" role="alert">{error}</p>}
-        <div className="quick-answers">
-          {quickAnswers.map((quickAnswer) => (
-            <button key={quickAnswer} onClick={() => onSubmit(quickAnswer)} disabled={disabled}>{quickAnswer}</button>
-          ))}
+    <section className="screen conversation-screen">
+      <header className="conversation-header">
+        <button className="back-button" type="button" onClick={onBack} aria-label="返回今天">{backIcon}</button>
+        <h1>对话</h1>
+      </header>
+      <p className="date-separator">{todayLabel()}</p>
+
+      <div className="messages">
+        <div className="message-group agent-group">
+          <span className="agent-marker" aria-label="Agent">∴</span>
+          <p className="message">告诉我今天最想推进什么，以及你可以投入的时间。我会让 Hermes 把它整理成一份可执行的计划。</p>
         </div>
+
+        <label className="goal-field" htmlFor="plan-goal">
+          <span>今天想推进什么</span>
+          <textarea id="plan-goal" rows={1} value={goal} disabled={isGenerating} {...textareaProps(onGoalChange)} />
+        </label>
+
+        {isGenerating && (
+          <div className="message-group agent-group status-message" aria-live="polite">
+            <span className="agent-marker" aria-hidden="true">∴</span>
+            <p className="message">正在整理你的计划…</p>
+          </div>
+        )}
+
+        {error && <p className="request-error" role="alert">{error}</p>}
+
+        {previewPlan && (
+          <section className="plan-preview" aria-label="计划预览">
+            <p className="preview-label">计划预览</p>
+            <h2>{previewPlan.title}</h2>
+            <p className="preview-facts">{previewPlan.startTime} — {previewPlan.endTime} · {previewPlan.totalDuration}</p>
+            <ol className="preview-steps">
+              {previewPlan.tasks.map((task) => (
+                <li data-testid="preview-step" key={`${task.startTime}-${task.title}`}>
+                  <time>{task.startTime}</time>
+                  <div><strong>{task.title}</strong><span>{task.description}</span></div>
+                </li>
+              ))}
+            </ol>
+            <button className="primary-action" type="button" onClick={onSave}>保存并回到今天</button>
+          </section>
+        )}
       </div>
+
       <form className="composer" onSubmit={submit}>
         <label className="sr-only" htmlFor="plan-reply">补充你的安排</label>
-        <textarea id="plan-reply" aria-label="补充你的安排" rows={1} value={answer} disabled={disabled} placeholder="例如：我有 2 小时，先做完整演示" {...textareaProps(onAnswerChange)} />
-        <button type="submit" aria-label="发送" disabled={disabled}>发送</button>
+        <textarea
+          id="plan-reply"
+          aria-label="补充你的安排"
+          rows={1}
+          value={answer}
+          disabled={isGenerating}
+          placeholder="补充可用时间或期望结果"
+          {...textareaProps(onAnswerChange)}
+        />
+        <button type="submit" aria-label="发送" disabled={isGenerating}>{sendIcon}</button>
       </form>
     </section>
   )
 }
 
-function Thinking() {
-  return (
-    <section className="screen thinking-screen" aria-live="polite">
-      <AppHeader />
-      <div className="thinking-content enter">
-        <div className="thinking-symbol"><i /><i /><i /></div>
-        <p className="eyebrow">正在生成</p>
-        <h1>正在整理你的下午安排</h1>
-        <p>把最重要的演示路径放在前面。</p>
-      </div>
-    </section>
-  )
-}
-
-function Preview({ onSave, onBack, plan }: { onSave: () => void; onBack: () => void; plan: Plan }) {
-  return (
-    <section className="screen preview-screen">
-      <AppHeader onBack={onBack} />
-      <div className="preview-heading enter">
-        <p className="eyebrow">已为你整理</p>
-        <h1>计划预览</h1>
-      </div>
-      <article className="preview-card enter delay-1">
-        <h2>{plan.title}</h2>
-        <div className="plan-facts"><span><b>{plan.totalDuration}</b>总时长</span><span><b>{plan.startTime}–{plan.endTime}</b>今天下午</span></div>
-      </article>
-      <ol className="preview-steps">
-        {plan.tasks.map((task, index) => (
-          <li className="enter" style={{ animationDelay: `${150 + index * 65}ms` }} data-testid="preview-step" key={task.title}>
-            <span className="step-number">0{index + 1}</span>
-            <div><time>{task.startTime} — {task.endTime} · {task.estimatedDuration}</time><h2>{task.title}</h2><p>{task.description}</p></div>
-          </li>
-        ))}
-      </ol>
-      <div className="bottom-action"><button className="primary-button" onClick={onSave} aria-label="保存到今天计划">保存到今天计划 <span aria-hidden="true">→</span></button></div>
-    </section>
-  )
-}
-
 export function App() {
-  const [screen, setScreen] = useState<Screen>('home')
+  const [screen, setScreen] = useState<Screen>('today')
   const [plan, setPlan] = useState<Plan>(() => loadSavedPlan() ?? initialMvpPlan)
   const [goal, setGoal] = useState(originalGoal)
   const [answer, setAnswer] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [previewPlan, setPreviewPlan] = useState<Plan | null>(null)
-  const isGenerating = useRef(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const generationLock = useRef(false)
 
   const clearError = () => setError(null)
 
-  const beginGeneration = async (submittedAnswer: string) => {
-    if (isGenerating.current) return
-
-    const validationError = validateRequest(goal, submittedAnswer)
+  const beginGeneration = async () => {
+    if (generationLock.current) return
+    const validationError = validateRequest(goal, answer)
     if (validationError) {
       setError(validationError)
       return
     }
 
-    isGenerating.current = true
-    setAnswer(submittedAnswer)
+    generationLock.current = true
+    setIsGenerating(true)
+    setPreviewPlan(null)
     clearError()
-    setScreen('thinking')
 
     try {
-      const nextPlan = await requestPlan({ goal, answers: [submittedAnswer] })
-      setPreviewPlan(nextPlan)
-      setScreen('preview')
+      setPreviewPlan(await requestPlan({ goal, answers: [answer] }))
     } catch (caughtError) {
-      const message = caughtError instanceof Error && caughtError.message ? caughtError.message : '生成计划失败，请稍后重试。'
-      setError(message)
-      setScreen('chat')
+      setError(caughtError instanceof Error && caughtError.message ? caughtError.message : '生成计划失败，请稍后重试。')
     } finally {
-      isGenerating.current = false
+      generationLock.current = false
+      setIsGenerating(false)
     }
   }
 
@@ -216,16 +213,28 @@ export function App() {
     if (!previewPlan) return
     savePlanToStorage(previewPlan)
     setPlan(previewPlan)
-    setScreen('home')
+    setScreen('today')
   }
 
   return (
     <main className="app-shell">
       <div className="phone-canvas">
-        {screen === 'home' && <Home plan={plan} onNewPlan={() => setScreen('chat')} />}
-        {screen === 'chat' && <Chat answer={answer} disabled={isGenerating.current} error={error} goal={goal} onAnswerChange={(nextAnswer) => { clearError(); setAnswer(nextAnswer) }} onBack={() => setScreen('home')} onGoalChange={(nextGoal) => { clearError(); setGoal(nextGoal) }} onSubmit={beginGeneration} />}
-        {screen === 'thinking' && <Thinking />}
-        {screen === 'preview' && previewPlan && <Preview plan={previewPlan} onSave={savePlan} onBack={() => setScreen('chat')} />}
+        {screen === 'today' ? (
+          <Today plan={plan} onOpenConversation={() => setScreen('conversation')} />
+        ) : (
+          <Conversation
+            answer={answer}
+            error={error}
+            goal={goal}
+            isGenerating={isGenerating}
+            onAnswerChange={(value) => { clearError(); setAnswer(value) }}
+            onBack={() => setScreen('today')}
+            onGoalChange={(value) => { clearError(); setGoal(value) }}
+            onSave={savePlan}
+            onSubmit={beginGeneration}
+            previewPlan={previewPlan}
+          />
+        )}
       </div>
     </main>
   )
