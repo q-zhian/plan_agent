@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { ChangeEvent, FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { requestPlan } from './plan-api'
 import { initialMvpPlan, loadSavedPlan, savePlanToStorage, type Plan } from './plan-state'
 import './styles.css'
@@ -101,13 +101,21 @@ type ConversationProps = {
 
 function Conversation({ answer, elapsedSeconds, error, goal, isGenerating, onAnswerChange, onBack, onGoalChange, onSave, onSubmit, previewPlan, submittedAnswer }: ConversationProps) {
   const resizeTextarea = useAutoGrowingTextarea()
-  const textareaProps = (onChange: (value: string) => void) => ({
-    ref: resizeTextarea,
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const setComposerTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
+    composerTextareaRef.current = textarea
+    resizeTextarea(textarea)
+  }, [resizeTextarea])
+  const textareaProps = (onChange: (value: string) => void, ref = resizeTextarea) => ({
+    ref,
     onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
       resizeTextarea(event.currentTarget)
       onChange(event.currentTarget.value)
     },
   })
+  useLayoutEffect(() => {
+    resizeTextarea(composerTextareaRef.current)
+  }, [answer, resizeTextarea])
   const submit = (event: FormEvent) => {
     event.preventDefault()
     onSubmit()
@@ -182,7 +190,7 @@ function Conversation({ answer, elapsedSeconds, error, goal, isGenerating, onAns
           value={answer}
           disabled={isGenerating}
           placeholder="补充可用时间或期望结果"
-          {...textareaProps(onAnswerChange)}
+          {...textareaProps(onAnswerChange, setComposerTextarea)}
         />
         <button type="submit" aria-label="发送" disabled={isGenerating}>{sendIcon}</button>
       </form>

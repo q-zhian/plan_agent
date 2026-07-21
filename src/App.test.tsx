@@ -96,6 +96,59 @@ describe('production Hermes MVP interface', () => {
     expect(screen.getByText(answer)).toBeTruthy()
   })
 
+  test('resets the composer height only after a valid submission', async () => {
+    const response = deferred<Plan>()
+    const answerText = '第一行\n第二行\n第三行\n第四行'
+    mockedRequestPlan.mockReturnValueOnce(response.promise)
+    render(<App />)
+    openConversation()
+    const answer = screen.getByRole('textbox', { name: '补充你的安排' }) as HTMLTextAreaElement
+    Object.defineProperty(answer, 'scrollHeight', {
+      configurable: true,
+      get: () => answer.value ? 120 : 40,
+    })
+    fillRequest('完成回归验证', answerText)
+    expect(answer.style.height).toBe('120px')
+
+    fireEvent.change(screen.getByRole('textbox', { name: '今天想推进什么' }), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    expect(answer.value).toBe(answerText)
+    expect(answer.style.height).toBe('120px')
+
+    fireEvent.change(screen.getByRole('textbox', { name: '今天想推进什么' }), { target: { value: '完成回归验证' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    expect(answer.value).toBe('')
+    expect(answer.style.height).toBe('40px')
+
+    await act(async () => { response.resolve(generatedPlan) })
+    fireEvent.input(answer, { target: { value: answerText } })
+    expect(answer.style.height).toBe('120px')
+  })
+
+  test('recalculates the composer height when a failed request restores text', async () => {
+    const response = deferred<Plan>()
+    const answerText = '第一行\n第二行\n第三行\n第四行'
+    mockedRequestPlan.mockReturnValueOnce(response.promise)
+    render(<App />)
+    openConversation()
+    const answer = screen.getByRole('textbox', { name: '补充你的安排' }) as HTMLTextAreaElement
+    Object.defineProperty(answer, 'scrollHeight', {
+      configurable: true,
+      get: () => answer.value ? 120 : 40,
+    })
+    fillRequest('完成失败重试验证', answerText)
+    expect(answer.style.height).toBe('120px')
+
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    expect(answer.value).toBe('')
+    expect(answer.style.height).toBe('40px')
+
+    response.reject(new Error('Hermes 响应超时，请稍后重试。'))
+    await screen.findByText('Hermes 响应超时，请稍后重试。')
+    expect(answer.value).toBe(answerText)
+    expect(answer.style.height).toBe('120px')
+  })
+
   test.each([
     ['empty goal', '', '有可用时间', '请先填写今天想推进什么。'],
     ['blank answer', '修复登录流程', '   ', '请补充你的可用时间或目标成果。'],
