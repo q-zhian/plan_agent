@@ -6,6 +6,8 @@ This is a product/UI handoff for the future Android application. It records the 
 
 The current MVP remains a plan-only vertical slice. The broader Agent vision is preserved as product context, not an implementation requirement in this document.
 
+This document is intentionally not an implementation plan or authorization to build a prototype. A future display prototype, implementation plan, or product-code change requires a separate user request and explicit scope confirmation.
+
 ## Product intent
 
 The app is a calm, low-pressure personal planning assistant. Opening it should answer one question immediately: what is my day arranged like? It must not resemble a project-management dashboard or greet the user with motivational copy.
