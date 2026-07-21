@@ -1,0 +1,179 @@
+:root {
+  color-scheme: dark;
+  font-family: Roboto, "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  background: #111211;
+  color: #f1f1ed;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  min-width: 320px;
+  margin: 0;
+  background: #111211;
+}
+
+button, input { font: inherit; }
+
+button {
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active { opacity: .62; }
+
+.phone {
+  position: relative;
+  min-height: 100dvh;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 28px 20px 114px;
+  background: #111211;
+}
+
+.today-header, .date-separator, .preview-label, .outcome-line {
+  color: rgb(241 241 237 / 53%);
+  font-size: 12px;
+  letter-spacing: .02em;
+}
+
+.today-header { margin-bottom: 31px; }
+
+.outcome-line {
+  margin: -17px 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgb(241 241 237 / 14%);
+}
+
+.timeline { position: relative; }
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 48px 17px minmax(0, 1fr);
+  min-height: 82px;
+}
+
+.timeline-row time {
+  padding-top: 5px;
+  color: rgb(241 241 237 / 47%);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-rail { position: relative; border-left: 1px solid rgb(241 241 237 / 20%); }
+
+.timeline-node {
+  position: absolute;
+  top: 8px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgb(241 241 237 / 56%);
+  border-radius: 50%;
+  background: #111211;
+}
+
+.is-current .timeline-rail { border-left-color: rgb(241 241 237 / 88%); }
+.is-current .timeline-node { border-color: #f1f1ed; box-shadow: 0 0 0 2px #111211, 0 0 0 3px rgb(241 241 237 / 53%); }
+
+.task-content { padding-bottom: 26px; border-bottom: 1px solid rgb(241 241 237 / 14%); }
+
+.task-trigger {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 37px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgb(241 241 237 / 76%);
+  font-size: 16px;
+  line-height: 1.42;
+  text-align: left;
+}
+
+.is-current .task-trigger { color: #f1f1ed; }
+
+.chevron, .chevron svg { display: block; width: 18px; height: 18px; }
+.chevron { margin: 1px 0 0 12px; color: rgb(241 241 237 / 46%); transition: transform 180ms ease, color 180ms ease; }
+.chevron.is-open { transform: rotate(90deg); color: #f1f1ed; }
+.chevron svg, .agent-entry svg, .back-button svg, .composer svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.55; }
+
+.task-details { padding: 9px 22px 1px 0; color: rgb(241 241 237 / 57%); font-size: 14px; line-height: 1.65; }
+.task-details p { margin: 0 0 9px; }
+.task-details strong { display: inline-block; width: 39px; color: rgb(241 241 237 / 82%); font-weight: 500; }
+
+.agent-entry {
+  position: fixed;
+  right: max(20px, calc((100vw - 430px) / 2 + 20px));
+  bottom: 25px;
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid rgb(241 241 237 / 23%);
+  border-radius: 50%;
+  background: rgb(31 32 31 / 92%);
+  color: #f1f1ed;
+}
+
+.agent-entry svg { width: 23px; height: 23px; }
+
+.conversation-header {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  margin: -6px 0 34px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.back-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.back-button svg { width: 22px; height: 22px; }
+.conversation-header > span { grid-column: 2; }
+.date-separator { margin: 0 0 31px; text-align: center; }
+
+.messages { display: grid; gap: 26px; }
+
+.message-group { display: flex; align-items: flex-start; gap: 10px; }
+.agent-marker, .user-marker { display: grid; width: 25px; height: 25px; flex: 0 0 25px; place-items: center; border: 1px solid rgb(241 241 237 / 31%); border-radius: 50%; color: rgb(241 241 237 / 73%); font-size: 13px; }
+.agent-marker { font-size: 18px; letter-spacing: -3px; }
+.user-group { justify-content: flex-end; }
+.user-group > div { max-width: 77%; text-align: right; }
+.message { margin: 1px 0 0; color: rgb(241 241 237 / 76%); font-size: 15px; line-height: 1.65; }
+
+.preview-prompt { margin-left: 35px; padding-top: 2px; }
+.preview-prompt p { margin: 0 0 12px; color: rgb(241 241 237 / 57%); font-size: 14px; line-height: 1.6; }
+
+.quiet-action { min-height: 38px; padding: 0; border: 0; background: transparent; color: rgb(241 241 237 / 72%); font-size: 14px; text-align: left; }
+
+.plan-preview { margin-left: 35px; padding: 18px 0 3px; border-top: 1px solid rgb(241 241 237 / 20%); }
+.preview-label { margin: 0 0 7px; }
+.plan-preview h2 { margin: 0 0 16px; font-size: 18px; font-weight: 500; letter-spacing: -.02em; }
+.preview-row { display: grid; grid-template-columns: 58px 1fr; padding: 13px 0; border-top: 1px solid rgb(241 241 237 / 15%); color: rgb(241 241 237 / 73%); font-size: 14px; line-height: 1.45; }
+.preview-row span:first-child { color: rgb(241 241 237 / 45%); font-variant-numeric: tabular-nums; }
+
+.primary-action { display: block; width: 100%; min-height: 48px; margin-top: 19px; border: 0; border-radius: 999px; background: #f1f1ed; color: #181918; font-size: 14px; }
+.plan-preview .quiet-action { margin-top: 8px; }
+
+.composer { position: fixed; right: 0; bottom: 0; left: 0; display: flex; gap: 8px; max-width: 430px; margin: 0 auto; padding: 13px 20px 19px; background: #111211; border-top: 1px solid rgb(241 241 237 / 14%); }
+.composer input { min-width: 0; flex: 1; height: 42px; padding: 0 14px; border: 1px solid rgb(241 241 237 / 18%); border-radius: 21px; outline: 0; background: #181918; color: #f1f1ed; font-size: 14px; }
+.composer input:focus { border-color: rgb(241 241 237 / 55%); }
+.composer button { display: grid; width: 42px; height: 42px; place-items: center; padding: 0; border: 0; background: transparent; color: rgb(241 241 237 / 62%); }
+.composer svg { width: 20px; height: 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 120ms !important; animation-duration: 120ms !important; }
+}
