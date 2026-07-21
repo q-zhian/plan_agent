@@ -19,7 +19,7 @@ Create or change only:
 - prototypes/future-android-ui/styles.css
 - prototypes/future-android-ui/state.js
 - prototypes/future-android-ui/app.js
-- prototypes/future-android-ui/tests/state.test.mjs
+- prototypes/future-android-ui/tests/state.node.mjs
 - prototypes/future-android-ui/README.md
 
 Never modify src, server, server.mjs, dist, deployment scripts, root README, package files, or current tests. Fixed fictional content only: no Obsidian reads/writes and no network requests.
@@ -36,7 +36,7 @@ At 375 by 667, acceptance is:
 
 **Files:**
 
-- Create: prototypes/future-android-ui/tests/state.test.mjs
+- Create: prototypes/future-android-ui/tests/state.node.mjs
 - Create: prototypes/future-android-ui/state.js
 
 - [ ] **Step 1: Write the failing interaction-state test**
@@ -62,7 +62,7 @@ test("moves through expand, conversation preview, save, and return", () => {
 
 - [ ] **Step 2: Verify RED**
 
-Run: node --test prototypes/future-android-ui/tests/state.test.mjs
+Run: node --test prototypes/future-android-ui/tests/state.node.mjs
 
 Expected: FAIL with ERR_MODULE_NOT_FOUND for state.js.
 
@@ -91,7 +91,7 @@ export function reducePrototypeState(state, action) {
 
 - [ ] **Step 4: Verify GREEN**
 
-Run: node --test prototypes/future-android-ui/tests/state.test.mjs
+Run: node --test prototypes/future-android-ui/tests/state.node.mjs
 
 Expected: PASS with one passing test.
 
@@ -166,7 +166,7 @@ root.addEventListener("click", (event) => {
 
 - [ ] **Step 4: Re-run the reducer test after renderer integration**
 
-Run: node --test prototypes/future-android-ui/tests/state.test.mjs
+Run: node --test prototypes/future-android-ui/tests/state.node.mjs
 
 Expected: PASS with one passing test.
 
@@ -188,7 +188,7 @@ It must direct reviewers to open localhost port 4173 at a 375 by 667 mobile view
 
 - [ ] **Step 2: Run non-mutating automated verification**
 
-Run: node --test prototypes/future-android-ui/tests/state.test.mjs; node --check prototypes/future-android-ui/app.js
+Run: node --test prototypes/future-android-ui/tests/state.node.mjs; node --check prototypes/future-android-ui/app.js
 
 Expected: the prototype state test passes and the browser module has no JavaScript syntax error. Do not run npm run build: it writes dist, which is outside this prototype boundary. Run npm test only when the pre-existing workspace dependencies are already installed; do not install or change production dependencies for this display prototype.
 
